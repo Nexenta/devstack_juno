@@ -1,7 +1,7 @@
-cryptsetup
-genisoimage
+# Stuff for diablo volumes
 iscsi-initiator-utils
 lvm2
-sg3_utils
-# Stuff for diablo volumes
+genisoimage
 sysfsutils
+sg3_utils
+python-libguestfs # NOPRIME

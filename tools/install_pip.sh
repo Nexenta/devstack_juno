@@ -16,11 +16,11 @@ set -o xtrace
 TOOLS_DIR=$(cd $(dirname "$0") && pwd)
 TOP_DIR=`cd $TOOLS_DIR/..; pwd`
 
-# Change dir to top of DevStack
+# Change dir to top of devstack
 cd $TOP_DIR
 
 # Import common functions
-source $TOP_DIR/stackrc
+source $TOP_DIR/functions
 
 FILES=$TOP_DIR/files
 
@@ -42,37 +42,9 @@ function get_versions {
 
 
 function install_get_pip {
-    # If get-pip.py isn't python, delete it. This was probably an
-    # outage on the server.
-    if [[ -r $LOCAL_PIP ]]; then
-        if ! head -1 $LOCAL_PIP | grep -q '#!/usr/bin/env python'; then
-            echo "WARNING: Corrupt $LOCAL_PIP found removing"
-            rm $LOCAL_PIP
-        fi
-    fi
-
-    # The OpenStack gate and others put a cached version of get-pip.py
-    # for this to find, explicitly to avoid download issues.
-    #
-    # However, if DevStack *did* download the file, we want to check
-    # for updates; people can leave their stacks around for a long
-    # time and in the mean-time pip might get upgraded.
-    #
-    # Thus we use curl's "-z" feature to always check the modified
-    # since and only download if a new version is out -- but only if
-    # it seems we downloaded the file originally.
-    if [[ ! -r $LOCAL_PIP || -r $LOCAL_PIP.downloaded ]]; then
-        # only test freshness if LOCAL_PIP is actually there,
-        # otherwise we generate a scary warning.
-        local timecond=""
-        if [[ -r $LOCAL_PIP ]]; then
-            timecond="-z $LOCAL_PIP"
-        fi
-
-        curl -f --retry 6 --retry-delay 5 \
-            $timecond -o $LOCAL_PIP $PIP_GET_PIP_URL || \
+    if [[ ! -r $LOCAL_PIP ]]; then
+        curl -o $LOCAL_PIP $PIP_GET_PIP_URL || \
             die $LINENO "Download of get-pip.py failed"
-        touch $LOCAL_PIP.downloaded
     fi
     sudo -H -E python $LOCAL_PIP
 }
@@ -90,7 +62,7 @@ function configure_pypi_alternative_url {
         touch $PIP_CONFIG_FILE
     fi
     if ! ini_has_option "$PIP_CONFIG_FILE" "global" "index-url"; then
-        # It means that the index-url does not exist
+        #it means that the index-url does not exist
         iniset "$PIP_CONFIG_FILE" "global" "index-url" "$PYPI_OVERRIDE"
     fi
 
@@ -110,11 +82,7 @@ get_versions
 # Do pip
 
 # Eradicate any and all system packages
-
-# python in f23 depends on the python-pip package
-if ! { is_fedora && [[ $DISTRO == "f23" ]]; }; then
-    uninstall_package python-pip
-fi
+uninstall_package python-pip
 
 install_get_pip
 

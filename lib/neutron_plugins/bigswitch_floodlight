@@ -1,10 +1,8 @@
-#!/bin/bash
-#
 # Neuton Big Switch/FloodLight plugin
 # ------------------------------------
 
 # Save trace setting
-_XTRACE_NEUTRON_BIGSWITCH=$(set +o | grep xtrace)
+BS_XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 source $TOP_DIR/lib/neutron_plugins/ovs_base
@@ -58,9 +56,9 @@ function neutron_plugin_configure_service {
 function neutron_plugin_setup_interface_driver {
     local conf_file=$1
     if [ "$BS_FL_VIF_DRIVER" = "ivs" ]; then
-        iniset $conf_file DEFAULT interface_driver ivs
+        iniset $conf_file DEFAULT interface_driver neutron.agent.linux.interface.IVSInterfaceDriver
     else
-        iniset $conf_file DEFAULT interface_driver openvswitch
+        iniset $conf_file DEFAULT interface_driver neutron.agent.linux.interface.OVSInterfaceDriver
     fi
 }
 
@@ -75,4 +73,4 @@ function neutron_plugin_check_adv_test_requirements {
 }
 
 # Restore xtrace
-$_XTRACE_NEUTRON_BIGSWITCH
+$BS_XTRACE

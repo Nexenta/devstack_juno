@@ -8,6 +8,7 @@ libvirt-python
 net-tools
 openssh-clients
 openvswitch
+python-libguestfs
 sgabios
 syslinux
 tftp-server

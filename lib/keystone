@@ -1,5 +1,3 @@
-#!/bin/bash
-#
 # lib/keystone
 # Functions to control the configuration and operation of **Keystone**
 
@@ -28,29 +26,26 @@
 # - _cleanup_keystone_apache_wsgi
 
 # Save trace setting
-_XTRACE_KEYSTONE=$(set +o | grep xtrace)
+XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 # Defaults
 # --------
 
 # Set up default directories
-GITDIR["keystoneauth"]=$DEST/keystoneauth
 GITDIR["python-keystoneclient"]=$DEST/python-keystoneclient
 GITDIR["keystonemiddleware"]=$DEST/keystonemiddleware
+
 KEYSTONE_DIR=$DEST/keystone
-
-# Keystone virtual environment
-if [[ ${USE_VENV} = True ]]; then
-    PROJECT_VENV["keystone"]=${KEYSTONE_DIR}.venv
-    KEYSTONE_BIN_DIR=${PROJECT_VENV["keystone"]}/bin
-else
-    KEYSTONE_BIN_DIR=$(get_python_exec_prefix)
-fi
-
 KEYSTONE_CONF_DIR=${KEYSTONE_CONF_DIR:-/etc/keystone}
 KEYSTONE_CONF=$KEYSTONE_CONF_DIR/keystone.conf
 KEYSTONE_PASTE_INI=${KEYSTONE_PASTE_INI:-$KEYSTONE_CONF_DIR/keystone-paste.ini}
+KEYSTONE_AUTH_CACHE_DIR=${KEYSTONE_AUTH_CACHE_DIR:-/var/cache/keystone}
+if is_suse; then
+    KEYSTONE_WSGI_DIR=${KEYSTONE_WSGI_DIR:-/srv/www/htdocs/keystone}
+else
+    KEYSTONE_WSGI_DIR=${KEYSTONE_WSGI_DIR:-/var/www/keystone}
+fi
 
 # Set up additional extensions, such as oauth1, federation
 # Example of KEYSTONE_EXTENSIONS=oauth1,federation
@@ -59,22 +54,21 @@ KEYSTONE_EXTENSIONS=${KEYSTONE_EXTENSIONS:-}
 # Toggle for deploying Keystone under HTTPD + mod_wsgi
 KEYSTONE_USE_MOD_WSGI=${KEYSTONE_USE_MOD_WSGI:-${ENABLE_HTTPD_MOD_WSGI_SERVICES}}
 
-# Select the Catalog backend driver
+# Select the backend for Keystone's service catalog
 KEYSTONE_CATALOG_BACKEND=${KEYSTONE_CATALOG_BACKEND:-sql}
 KEYSTONE_CATALOG=$KEYSTONE_CONF_DIR/default_catalog.templates
 
-# Select the token persistence backend driver
+# Select the backend for Tokens
 KEYSTONE_TOKEN_BACKEND=${KEYSTONE_TOKEN_BACKEND:-sql}
 
-# Select the Identity backend driver
+# Select the backend for Identity
 KEYSTONE_IDENTITY_BACKEND=${KEYSTONE_IDENTITY_BACKEND:-sql}
 
-# Select the Assignment backend driver
+# Select the backend for Assignment
 KEYSTONE_ASSIGNMENT_BACKEND=${KEYSTONE_ASSIGNMENT_BACKEND:-sql}
 
-# Select Keystone's token provider (and format)
-# Choose from 'uuid', 'pki', 'pkiz', or 'fernet'
-KEYSTONE_TOKEN_FORMAT=${KEYSTONE_TOKEN_FORMAT:-}
+# Select Keystone's token format
+# Choose from 'UUID', 'PKI', or 'PKIZ'
 KEYSTONE_TOKEN_FORMAT=$(echo ${KEYSTONE_TOKEN_FORMAT} | tr '[:upper:]' '[:lower:]')
 
 # Set Keystone interface configuration
@@ -94,6 +88,12 @@ KEYSTONE_ADMIN_BIND_HOST=${KEYSTONE_ADMIN_BIND_HOST:-$KEYSTONE_SERVICE_HOST}
 # Set the tenant for service accounts in Keystone
 SERVICE_TENANT_NAME=${SERVICE_TENANT_NAME:-service}
 
+# valid identity backends as per dir keystone/identity/backends
+KEYSTONE_VALID_IDENTITY_BACKENDS=kvs,ldap,pam,sql
+
+# valid assignment backends as per dir keystone/identity/backends
+KEYSTONE_VALID_ASSIGNMENT_BACKENDS=kvs,ldap,sql
+
 # if we are running with SSL use https protocols
 if is_ssl_enabled_service "key" || is_service_enabled tls-proxy; then
     KEYSTONE_AUTH_PROTOCOL="https"
@@ -104,21 +104,8 @@ fi
 KEYSTONE_AUTH_URI=${KEYSTONE_AUTH_PROTOCOL}://${KEYSTONE_AUTH_HOST}:${KEYSTONE_AUTH_PORT}
 KEYSTONE_SERVICE_URI=${KEYSTONE_SERVICE_PROTOCOL}://${KEYSTONE_SERVICE_HOST}:${KEYSTONE_SERVICE_PORT}
 
-# V3 URIs
-KEYSTONE_AUTH_URI_V3=$KEYSTONE_AUTH_URI/v3
-KEYSTONE_SERVICE_URI_V3=$KEYSTONE_SERVICE_URI/v3
-
-
 # Functions
 # ---------
-
-# Test if Keystone is enabled
-# is_keystone_enabled
-function is_keystone_enabled {
-    [[ ,${ENABLED_SERVICES}, =~ ,"key", ]] && return 0
-    return 1
-}
-
 # cleanup_keystone() - Remove residual data files, anything left over from previous
 # runs that a clean run would need to clean up
 function cleanup_keystone {
@@ -127,19 +114,20 @@ function cleanup_keystone {
 
 # _cleanup_keystone_apache_wsgi() - Remove wsgi files, disable and remove apache vhost file
 function _cleanup_keystone_apache_wsgi {
+    sudo rm -f $KEYSTONE_WSGI_DIR/*.wsgi
     sudo rm -f $(apache_site_config_for keystone)
 }
 
 # _config_keystone_apache_wsgi() - Set WSGI config files of Keystone
 function _config_keystone_apache_wsgi {
-    local keystone_apache_conf
-    keystone_apache_conf=$(apache_site_config_for keystone)
+    sudo mkdir -p $KEYSTONE_WSGI_DIR
+
+    local keystone_apache_conf=$(apache_site_config_for keystone)
     local keystone_ssl=""
     local keystone_certfile=""
     local keystone_keyfile=""
     local keystone_service_port=$KEYSTONE_SERVICE_PORT
     local keystone_auth_port=$KEYSTONE_AUTH_PORT
-    local venv_path=""
 
     if is_ssl_enabled_service key; then
         keystone_ssl="SSLEngine On"
@@ -150,30 +138,35 @@ function _config_keystone_apache_wsgi {
         keystone_service_port=$KEYSTONE_SERVICE_PORT_INT
         keystone_auth_port=$KEYSTONE_AUTH_PORT_INT
     fi
-    if [[ ${USE_VENV} = True ]]; then
-        venv_path="python-path=${PROJECT_VENV["keystone"]}/lib/$(python_version)/site-packages"
-    fi
+
+    # copy proxy vhost and wsgi file
+    sudo cp $KEYSTONE_DIR/httpd/keystone.py $KEYSTONE_WSGI_DIR/main
+    sudo cp $KEYSTONE_DIR/httpd/keystone.py $KEYSTONE_WSGI_DIR/admin
 
     sudo cp $FILES/apache-keystone.template $keystone_apache_conf
     sudo sed -e "
         s|%PUBLICPORT%|$keystone_service_port|g;
         s|%ADMINPORT%|$keystone_auth_port|g;
         s|%APACHE_NAME%|$APACHE_NAME|g;
+        s|%PUBLICWSGI%|$KEYSTONE_WSGI_DIR/main|g;
+        s|%ADMINWSGI%|$KEYSTONE_WSGI_DIR/admin|g;
         s|%SSLENGINE%|$keystone_ssl|g;
         s|%SSLCERTFILE%|$keystone_certfile|g;
         s|%SSLKEYFILE%|$keystone_keyfile|g;
-        s|%USER%|$STACK_USER|g;
-        s|%VIRTUALENV%|$venv_path|g
-        s|%KEYSTONE_BIN%|$KEYSTONE_BIN_DIR|g
+        s|%USER%|$STACK_USER|g
     " -i $keystone_apache_conf
 }
 
 # configure_keystone() - Set config files, create data dirs, etc
 function configure_keystone {
-    sudo install -d -o $STACK_USER $KEYSTONE_CONF_DIR
+    if [[ ! -d $KEYSTONE_CONF_DIR ]]; then
+        sudo mkdir -p $KEYSTONE_CONF_DIR
+    fi
+    sudo chown $STACK_USER $KEYSTONE_CONF_DIR
 
     if [[ "$KEYSTONE_CONF_DIR" != "$KEYSTONE_DIR/etc" ]]; then
-        install -m 600 $KEYSTONE_DIR/etc/keystone.conf.sample $KEYSTONE_CONF
+        cp -p $KEYSTONE_DIR/etc/keystone.conf.sample $KEYSTONE_CONF
+        chmod 600 $KEYSTONE_CONF
         cp -p $KEYSTONE_DIR/etc/policy.json $KEYSTONE_CONF_DIR
         if [[ -f "$KEYSTONE_DIR/etc/keystone-paste.ini" ]]; then
             cp -p "$KEYSTONE_DIR/etc/keystone-paste.ini" "$KEYSTONE_PASTE_INI"
@@ -184,12 +177,6 @@ function configure_keystone {
     else
         # compatibility with mixed cfg and paste.deploy configuration
         KEYSTONE_PASTE_INI="$KEYSTONE_CONF"
-    fi
-
-    if [ "$ENABLE_IDENTITY_V2" == "False" ]; then
-        # Only Identity v3 API should be available; then disable v2 pipelines
-        inidelete $KEYSTONE_PASTE_INI composite:main \\/v2.0
-        inidelete $KEYSTONE_PASTE_INI composite:admin \\/v2.0
     fi
 
     configure_keystone_extensions
@@ -213,50 +200,76 @@ function configure_keystone {
         iniset $KEYSTONE_CONF DEFAULT member_role_name "_member_"
     fi
 
-    iniset $KEYSTONE_CONF identity driver "$KEYSTONE_IDENTITY_BACKEND"
-    iniset $KEYSTONE_CONF assignment driver "$KEYSTONE_ASSIGNMENT_BACKEND"
+    # check if identity backend is valid
+    if [[ "$KEYSTONE_VALID_IDENTITY_BACKENDS" =~ "$KEYSTONE_IDENTITY_BACKEND" ]]; then
+        iniset $KEYSTONE_CONF identity driver "keystone.identity.backends.$KEYSTONE_IDENTITY_BACKEND.Identity"
+    fi
 
-    iniset_rpc_backend keystone $KEYSTONE_CONF
+    # check if assignment backend is valid
+    if [[ "$KEYSTONE_VALID_ASSIGNMENT_BACKENDS" =~ "$KEYSTONE_ASSIGNMENT_BACKEND" ]]; then
+        iniset $KEYSTONE_CONF assignment driver "keystone.assignment.backends.$KEYSTONE_ASSIGNMENT_BACKEND.Assignment"
+    fi
 
-    iniset $KEYSTONE_CONF eventlet_server admin_bind_host "$KEYSTONE_ADMIN_BIND_HOST"
+    # Configure rabbitmq credentials
+    if is_service_enabled rabbit; then
+        iniset $KEYSTONE_CONF DEFAULT rabbit_password $RABBIT_PASSWORD
+        iniset $KEYSTONE_CONF DEFAULT rabbit_host $RABBIT_HOST
+    fi
+
+    # Set the URL advertised in the ``versions`` structure returned by the '/' route
+    if is_service_enabled tls-proxy; then
+        iniset $KEYSTONE_CONF DEFAULT public_endpoint "$KEYSTONE_SERVICE_PROTOCOL://$KEYSTONE_SERVICE_HOST:$KEYSTONE_SERVICE_PORT/"
+        iniset $KEYSTONE_CONF DEFAULT admin_endpoint "$KEYSTONE_SERVICE_PROTOCOL://$KEYSTONE_SERVICE_HOST:$KEYSTONE_AUTH_PORT/"
+    else
+        iniset $KEYSTONE_CONF DEFAULT public_endpoint "$KEYSTONE_SERVICE_PROTOCOL://$KEYSTONE_SERVICE_HOST:%(public_port)s/"
+        iniset $KEYSTONE_CONF DEFAULT admin_endpoint "$KEYSTONE_SERVICE_PROTOCOL://$KEYSTONE_SERVICE_HOST:%(admin_port)s/"
+    fi
+    iniset $KEYSTONE_CONF DEFAULT admin_bind_host "$KEYSTONE_ADMIN_BIND_HOST"
 
     # Register SSL certificates if provided
     if is_ssl_enabled_service key; then
         ensure_certificates KEYSTONE
 
-        iniset $KEYSTONE_CONF eventlet_server_ssl enable True
-        iniset $KEYSTONE_CONF eventlet_server_ssl certfile $KEYSTONE_SSL_CERT
-        iniset $KEYSTONE_CONF eventlet_server_ssl keyfile $KEYSTONE_SSL_KEY
+        iniset $KEYSTONE_CONF ssl enable True
+        iniset $KEYSTONE_CONF ssl certfile $KEYSTONE_SSL_CERT
+        iniset $KEYSTONE_CONF ssl keyfile $KEYSTONE_SSL_KEY
     fi
 
     if is_service_enabled tls-proxy; then
         # Set the service ports for a proxy to take the originals
-        iniset $KEYSTONE_CONF eventlet_server public_port $KEYSTONE_SERVICE_PORT_INT
-        iniset $KEYSTONE_CONF eventlet_server admin_port $KEYSTONE_AUTH_PORT_INT
+        iniset $KEYSTONE_CONF DEFAULT public_port $KEYSTONE_SERVICE_PORT_INT
+        iniset $KEYSTONE_CONF DEFAULT admin_port $KEYSTONE_AUTH_PORT_INT
     fi
 
     iniset $KEYSTONE_CONF DEFAULT admin_token "$SERVICE_TOKEN"
 
     if [[ "$KEYSTONE_TOKEN_FORMAT" != "" ]]; then
-        iniset $KEYSTONE_CONF token provider $KEYSTONE_TOKEN_FORMAT
+        iniset $KEYSTONE_CONF token provider keystone.token.providers.$KEYSTONE_TOKEN_FORMAT.Provider
     fi
 
     iniset $KEYSTONE_CONF database connection `database_connection_url keystone`
+    iniset $KEYSTONE_CONF ec2 driver "keystone.contrib.ec2.backends.sql.Ec2"
 
-    iniset $KEYSTONE_CONF token driver "$KEYSTONE_TOKEN_BACKEND"
+    if [[ "$KEYSTONE_TOKEN_BACKEND" = "sql" ]]; then
+        iniset $KEYSTONE_CONF token driver keystone.token.persistence.backends.sql.Token
+    elif [[ "$KEYSTONE_TOKEN_BACKEND" = "memcache" ]]; then
+        iniset $KEYSTONE_CONF token driver keystone.token.persistence.backends.memcache.Token
+    else
+        iniset $KEYSTONE_CONF token driver keystone.token.persistence.backends.kvs.Token
+    fi
 
-    iniset $KEYSTONE_CONF catalog driver "$KEYSTONE_CATALOG_BACKEND"
     if [[ "$KEYSTONE_CATALOG_BACKEND" = "sql" ]]; then
         # Configure ``keystone.conf`` to use sql
+        iniset $KEYSTONE_CONF catalog driver keystone.catalog.backends.sql.Catalog
         inicomment $KEYSTONE_CONF catalog template_file
     else
         cp -p $FILES/default_catalog.templates $KEYSTONE_CATALOG
 
         # Add swift endpoints to service catalog if swift is enabled
         if is_service_enabled s-proxy; then
-            echo "catalog.RegionOne.object_store.publicURL = http://%SERVICE_HOST%:$SWIFT_DEFAULT_BIND_PORT/v1/AUTH_\$(tenant_id)s" >> $KEYSTONE_CATALOG
-            echo "catalog.RegionOne.object_store.adminURL = http://%SERVICE_HOST%:$SWIFT_DEFAULT_BIND_PORT/" >> $KEYSTONE_CATALOG
-            echo "catalog.RegionOne.object_store.internalURL = http://%SERVICE_HOST%:$SWIFT_DEFAULT_BIND_PORT/v1/AUTH_\$(tenant_id)s" >> $KEYSTONE_CATALOG
+            echo "catalog.RegionOne.object_store.publicURL = http://%SERVICE_HOST%:8080/v1/AUTH_\$(tenant_id)s" >> $KEYSTONE_CATALOG
+            echo "catalog.RegionOne.object_store.adminURL = http://%SERVICE_HOST%:8080/" >> $KEYSTONE_CATALOG
+            echo "catalog.RegionOne.object_store.internalURL = http://%SERVICE_HOST%:8080/v1/AUTH_\$(tenant_id)s" >> $KEYSTONE_CATALOG
             echo "catalog.RegionOne.object_store.name = Swift Service" >> $KEYSTONE_CATALOG
         fi
 
@@ -274,6 +287,7 @@ function configure_keystone {
         " -i $KEYSTONE_CATALOG
 
         # Configure ``keystone.conf`` to use templates
+        iniset $KEYSTONE_CONF catalog driver "keystone.catalog.backends.templated.TemplatedCatalog"
         iniset $KEYSTONE_CONF catalog template_file "$KEYSTONE_CATALOG"
     fi
 
@@ -287,9 +301,8 @@ function configure_keystone {
         setup_colorized_logging $KEYSTONE_CONF DEFAULT
     fi
 
-    iniset $KEYSTONE_CONF DEFAULT debug $ENABLE_DEBUG_LOG_LEVEL
-
     if [ "$KEYSTONE_USE_MOD_WSGI" == "True" ]; then
+        iniset $KEYSTONE_CONF DEFAULT debug $ENABLE_DEBUG_LOG_LEVEL
         # Eliminate the %(asctime)s.%(msecs)03d from the log format strings
         iniset $KEYSTONE_CONF DEFAULT logging_context_format_string "%(process)d %(levelname)s %(name)s [%(request_id)s %(user_identity)s] %(instance)s%(message)s"
         iniset $KEYSTONE_CONF DEFAULT logging_default_format_string "%(process)d %(levelname)s %(name)s [-] %(instance)s%(message)s"
@@ -300,10 +313,12 @@ function configure_keystone {
 
     iniset $KEYSTONE_CONF DEFAULT max_token_size 16384
 
-    iniset $KEYSTONE_CONF eventlet_server admin_workers "$API_WORKERS"
+    iniset $KEYSTONE_CONF DEFAULT admin_workers "$API_WORKERS"
     # Public workers will use the server default, typically number of CPU.
 
-    iniset $KEYSTONE_CONF fernet_tokens key_repository "$KEYSTONE_CONF_DIR/fernet-keys/"
+    if [[ -n "$KEYSTONE_TOKEN_HASH_ALGORITHM" ]]; then
+        iniset $KEYSTONE_CONF token hash_algorithm "$KEYSTONE_TOKEN_HASH_ALGORITHM"
+    fi
 }
 
 function configure_keystone_extensions {
@@ -338,26 +353,18 @@ function configure_keystone_extensions {
 # demo                 demo       Member, anotherrole
 # invisible_to_admin   demo       Member
 
-# Group                Users      Roles                 Tenant
-# ------------------------------------------------------------------
-# admins               admin      admin                 admin
-# nonadmins            demo       Member, anotherrole   demo
-
-
 # Migrated from keystone_data.sh
 function create_keystone_accounts {
 
     # admin
-    local admin_tenant
-    admin_tenant=$(get_or_create_project "admin" default)
-    local admin_user
-    admin_user=$(get_or_create_user "admin" "$ADMIN_PASSWORD" default)
-    local admin_role
-    admin_role=$(get_or_create_role "admin")
-    get_or_add_user_project_role $admin_role $admin_user $admin_tenant
+    local admin_tenant=$(get_or_create_project "admin")
+    local admin_user=$(get_or_create_user "admin" \
+        "$ADMIN_PASSWORD" "$admin_tenant")
+    local admin_role=$(get_or_create_role "admin")
+    get_or_add_user_role $admin_role $admin_user $admin_tenant
 
     # Create service project/role
-    get_or_create_project "$SERVICE_TENANT_NAME" default
+    get_or_create_project "$SERVICE_TENANT_NAME"
 
     # Service role, so service users do not have to be admins
     get_or_create_role service
@@ -369,46 +376,31 @@ function create_keystone_accounts {
     get_or_create_role ResellerAdmin
 
     # The Member role is used by Horizon and Swift so we need to keep it:
-    local member_role
-    member_role=$(get_or_create_role "Member")
+    local member_role=$(get_or_create_role "Member")
 
     # another_role demonstrates that an arbitrary role may be created and used
     # TODO(sleepsonthefloor): show how this can be used for rbac in the future!
-    local another_role
-    another_role=$(get_or_create_role "anotherrole")
+    local another_role=$(get_or_create_role "anotherrole")
 
     # invisible tenant - admin can't see this one
-    local invis_tenant
-    invis_tenant=$(get_or_create_project "invisible_to_admin" default)
+    local invis_tenant=$(get_or_create_project "invisible_to_admin")
 
     # demo
-    local demo_tenant
-    demo_tenant=$(get_or_create_project "demo" default)
-    local demo_user
-    demo_user=$(get_or_create_user "demo" \
-        "$ADMIN_PASSWORD" "default" "demo@example.com")
+    local demo_tenant=$(get_or_create_project "demo")
+    local demo_user=$(get_or_create_user "demo" \
+        "$ADMIN_PASSWORD" "$demo_tenant" "demo@example.com")
 
-    get_or_add_user_project_role $member_role $demo_user $demo_tenant
-    get_or_add_user_project_role $admin_role $admin_user $demo_tenant
-    get_or_add_user_project_role $another_role $demo_user $demo_tenant
-    get_or_add_user_project_role $member_role $demo_user $invis_tenant
-
-    local admin_group
-    admin_group=$(get_or_create_group "admins" \
-        "default" "openstack admin group")
-    local non_admin_group
-    non_admin_group=$(get_or_create_group "nonadmins" \
-        "default" "non-admin group")
-
-    get_or_add_group_project_role $member_role $non_admin_group $demo_tenant
-    get_or_add_group_project_role $another_role $non_admin_group $demo_tenant
-    get_or_add_group_project_role $admin_role $admin_group $admin_tenant
+    get_or_add_user_role $member_role $demo_user $demo_tenant
+    get_or_add_user_role $admin_role $admin_user $demo_tenant
+    get_or_add_user_role $another_role $demo_user $demo_tenant
+    get_or_add_user_role $member_role $demo_user $invis_tenant
 
     # Keystone
     if [[ "$KEYSTONE_CATALOG_BACKEND" = 'sql' ]]; then
 
-        get_or_create_service "keystone" "identity" "Keystone Identity Service"
-        get_or_create_endpoint "identity" \
+        KEYSTONE_SERVICE=$(get_or_create_service "keystone" \
+            "identity" "Keystone Identity Service")
+        get_or_create_endpoint $KEYSTONE_SERVICE \
             "$REGION_NAME" \
             "$KEYSTONE_SERVICE_PROTOCOL://$KEYSTONE_SERVICE_HOST:$KEYSTONE_SERVICE_PORT/v$IDENTITY_API_VERSION" \
             "$KEYSTONE_AUTH_PROTOCOL://$KEYSTONE_AUTH_HOST:$KEYSTONE_AUTH_PORT/v$IDENTITY_API_VERSION" \
@@ -416,19 +408,13 @@ function create_keystone_accounts {
     fi
 }
 
-# Create a user that is capable of verifying keystone tokens for use with auth_token middleware.
-#
-# create_service_user <name> [role]
-#
-# The role defaults to the service role. It is allowed to be provided as optional as historically
-# a lot of projects have configured themselves with the admin or other role here if they are
-# using this user for other purposes beyond simply auth_token middleware.
-function create_service_user {
-    local role=${2:-service}
-
-    local user
-    user=$(get_or_create_user "$1" "$SERVICE_PASSWORD" default)
-    get_or_add_user_project_role "$role" "$user" "$SERVICE_TENANT_NAME"
+# Configure the API version for the OpenStack projects.
+# configure_API_version conf_file version [section]
+function configure_API_version {
+    local conf_file=$1
+    local api_version=$2
+    local section=${3:-keystone_authtoken}
+    iniset $conf_file $section auth_uri $KEYSTONE_SERVICE_PROTOCOL://$KEYSTONE_SERVICE_HOST:$KEYSTONE_SERVICE_PORT/v$api_version
 }
 
 # Configure the service to use the auth token middleware.
@@ -444,17 +430,19 @@ function configure_auth_token_middleware {
     local signing_dir=$3
     local section=${4:-keystone_authtoken}
 
-    iniset $conf_file $section auth_plugin password
-    iniset $conf_file $section auth_url $KEYSTONE_AUTH_URI
-    iniset $conf_file $section username $admin_user
-    iniset $conf_file $section password $SERVICE_PASSWORD
-    iniset $conf_file $section user_domain_id default
-    iniset $conf_file $section project_name $SERVICE_TENANT_NAME
-    iniset $conf_file $section project_domain_id default
-
-    iniset $conf_file $section auth_uri $KEYSTONE_SERVICE_URI
+    iniset $conf_file $section auth_host $KEYSTONE_AUTH_HOST
+    iniset $conf_file $section auth_port $KEYSTONE_AUTH_PORT
+    iniset $conf_file $section auth_protocol $KEYSTONE_AUTH_PROTOCOL
+    iniset $conf_file $section identity_uri $KEYSTONE_AUTH_URI
     iniset $conf_file $section cafile $SSL_BUNDLE_FILE
+    configure_API_version $conf_file $IDENTITY_API_VERSION $section
+    iniset $conf_file $section admin_tenant_name $SERVICE_TENANT_NAME
+    iniset $conf_file $section admin_user $admin_user
+    iniset $conf_file $section admin_password $SERVICE_PASSWORD
     iniset $conf_file $section signing_dir $signing_dir
+    if [[ -n "$KEYSTONE_TOKEN_HASH_ALGORITHM" ]]; then
+        iniset $conf_file keystone_authtoken hash_algorithms "$KEYSTONE_TOKEN_HASH_ALGORITHM"
+    fi
 }
 
 # init_keystone() - Initialize databases, etc.
@@ -464,35 +452,28 @@ function init_keystone {
     fi
 
     # (Re)create keystone database
-    recreate_database keystone
+    recreate_database keystone utf8
 
     # Initialize keystone database
-    $KEYSTONE_BIN_DIR/keystone-manage db_sync
+    $KEYSTONE_DIR/bin/keystone-manage db_sync
 
     local extension_value
     for extension_value in ${KEYSTONE_EXTENSIONS//,/ }; do
         if [[ -z "${extension_value}" ]]; then
             continue
         fi
-        $KEYSTONE_BIN_DIR/keystone-manage db_sync --extension "${extension_value}"
+        $KEYSTONE_DIR/bin/keystone-manage db_sync --extension "${extension_value}"
     done
 
-    if [[ "$KEYSTONE_TOKEN_FORMAT" == "pki" || "$KEYSTONE_TOKEN_FORMAT" == "pkiz" ]]; then
+    if [[ "$KEYSTONE_TOKEN_FORMAT" != "uuid" ]]; then
         # Set up certificates
         rm -rf $KEYSTONE_CONF_DIR/ssl
-        $KEYSTONE_BIN_DIR/keystone-manage pki_setup
-    fi
-    if [[ "$KEYSTONE_TOKEN_FORMAT" == "fernet" ]]; then
-        rm -rf "$KEYSTONE_CONF_DIR/fernet-keys/"
-        $KEYSTONE_BIN_DIR/keystone-manage fernet_setup
-    fi
-}
+        $KEYSTONE_DIR/bin/keystone-manage pki_setup
 
-# install_keystoneauth() - Collect source and prepare
-function install_keystoneauth {
-    if use_library_from_git "keystoneauth"; then
-        git_clone_by_name "keystoneauth"
-        setup_dev_lib "keystoneauth"
+        # Create cache dir
+        sudo mkdir -p $KEYSTONE_AUTH_CACHE_DIR
+        sudo chown $STACK_USER $KEYSTONE_AUTH_CACHE_DIR
+        rm -f $KEYSTONE_AUTH_CACHE_DIR/*
     fi
 }
 
@@ -507,8 +488,6 @@ function install_keystoneclient {
 
 # install_keystonemiddleware() - Collect source and prepare
 function install_keystonemiddleware {
-    # install_keystonemiddleware() is called when keystonemiddleware is needed
-    # to provide an opportunity to install it from the source repo
     if use_library_from_git "keystonemiddleware"; then
         git_clone_by_name "keystonemiddleware"
         setup_dev_lib "keystonemiddleware"
@@ -561,15 +540,19 @@ function start_keystone {
         tail_log key /var/log/$APACHE_NAME/keystone.log
         tail_log key-access /var/log/$APACHE_NAME/keystone_access.log
     else
+        local EXTRA_PARAMS=""
+        if [ "$ENABLE_DEBUG_LOG_LEVEL" == "True" ]; then
+            EXTRA_PARAMS="--debug"
+        fi
         # Start Keystone in a screen window
-        run_process key "$KEYSTONE_BIN_DIR/keystone-all --config-file $KEYSTONE_CONF"
+        run_process key "$KEYSTONE_DIR/bin/keystone-all --config-file $KEYSTONE_CONF $EXTRA_PARAMS"
     fi
 
     echo "Waiting for keystone to start..."
     # Check that the keystone service is running. Even if the tls tunnel
     # should be enabled, make sure the internal port is checked using
     # unencryted traffic at this point.
-    if ! wait_for_service $SERVICE_TIMEOUT $auth_protocol://$KEYSTONE_SERVICE_HOST:$service_port/v$IDENTITY_API_VERSION/; then
+    if ! timeout $SERVICE_TIMEOUT sh -c "while ! curl --noproxy '*' -k -s $auth_protocol://$KEYSTONE_SERVICE_HOST:$service_port/v$IDENTITY_API_VERSION/ >/dev/null; do sleep 1; done"; then
         die $LINENO "keystone did not start"
     fi
 
@@ -590,9 +573,12 @@ function stop_keystone {
     stop_process key
 }
 
+function is_keystone_enabled {
+    return is_service_enabled key
+}
 
 # Restore xtrace
-$_XTRACE_KEYSTONE
+$XTRACE
 
 # Tell emacs to use shell-script-mode
 ## Local variables:

@@ -1,5 +1,3 @@
-#!/bin/bash
-#
 # lib/cinder_plugins/nfs
 # Configure the nfs driver
 
@@ -15,7 +13,7 @@
 # configure_cinder_driver - make configuration changes, including those to other services
 
 # Save trace setting
-_XTRACE_CINDER_NFS=$(set +o | grep xtrace)
+MY_XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 
@@ -36,7 +34,7 @@ function configure_cinder_driver {
 }
 
 # Restore xtrace
-$_XTRACE_CINDER_NFS
+$MY_XTRACE
 
 # Local variables:
 # mode: shell-script

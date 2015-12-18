@@ -1,5 +1,3 @@
-#!/bin/bash
-#
 # lib/ldap
 # Functions to control the installation and configuration of **ldap**
 
@@ -8,7 +6,7 @@
 # - install_ldap()
 
 # Save trace setting
-_XTRACE_LDAP=$(set +o | grep xtrace)
+XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 
@@ -53,10 +51,9 @@ fi
 # _ldap_varsubst file
 function _ldap_varsubst {
     local infile=$1
-    local slappass=$2
     sed -e "
         s|\${LDAP_OLCDB_NUMBER}|$LDAP_OLCDB_NUMBER|
-        s|\${SLAPPASS}|$slappass|
+        s|\${SLAPPASS}|$SLAPPASS|
         s|\${LDAP_ROOTPW_COMMAND}|$LDAP_ROOTPW_COMMAND|
         s|\${BASE_DC}|$LDAP_BASE_DC|
         s|\${BASE_DN}|$LDAP_BASE_DN|
@@ -82,8 +79,7 @@ function cleanup_ldap {
 function init_ldap {
     local keystone_ldif
 
-    local tmp_ldap_dir
-    tmp_ldap_dir=$(mktemp -d -t ldap.$$.XXXXXXXXXX)
+    local tmp_ldap_dir=$(mktemp -d -t ldap.$$.XXXXXXXXXX)
 
     # Remove data but not schemas
     clear_ldap_state
@@ -114,8 +110,7 @@ function install_ldap {
     echo "Installing LDAP inside function"
     echo "os_VENDOR is $os_VENDOR"
 
-    local tmp_ldap_dir
-    tmp_ldap_dir=$(mktemp -d -t ldap.$$.XXXXXXXXXX)
+    local tmp_ldap_dir=$(mktemp -d -t ldap.$$.XXXXXXXXXX)
 
     printf "installing OpenLDAP"
     if is_ubuntu; then
@@ -131,12 +126,11 @@ function install_ldap {
     fi
 
     echo "LDAP_PASSWORD is $LDAP_PASSWORD"
-    local slappass
-    slappass=$(slappasswd -s $LDAP_PASSWORD)
+    local slappass=$(slappasswd -s $LDAP_PASSWORD)
     printf "LDAP secret is $slappass\n"
 
     # Create manager.ldif and add to olcdb
-    _ldap_varsubst $FILES/ldap/manager.ldif.in $slappass >$tmp_ldap_dir/manager.ldif
+    _ldap_varsubst $FILES/ldap/manager.ldif.in >$tmp_ldap_dir/manager.ldif
     sudo ldapmodify -Y EXTERNAL -H ldapi:/// -f $tmp_ldap_dir/manager.ldif
 
     # On fedora we need to manually add cosine and inetorgperson schemas
@@ -144,9 +138,6 @@ function install_ldap {
         sudo ldapadd -Y EXTERNAL -H ldapi:/// -f /etc/openldap/schema/cosine.ldif
         sudo ldapadd -Y EXTERNAL -H ldapi:/// -f /etc/openldap/schema/inetorgperson.ldif
     fi
-
-    pip_install_gr ldappool
-
     rm -rf $tmp_ldap_dir
 }
 
@@ -166,7 +157,7 @@ function clear_ldap_state {
 }
 
 # Restore xtrace
-$_XTRACE_LDAP
+$XTRACE
 
 # Tell emacs to use shell-script-mode
 ## Local variables:

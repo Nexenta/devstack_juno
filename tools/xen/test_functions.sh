@@ -116,6 +116,18 @@ function test_no_plugin_directory_found {
     grep "[ -d /usr/lib/xcp/plugins/ ]" $LIST_OF_ACTIONS
 }
 
+function test_zip_snapshot_location_http {
+    diff \
+    <(zip_snapshot_location "http://github.com/openstack/nova.git" "master") \
+    <(echo "http://github.com/openstack/nova/zipball/master")
+}
+
+function test_zip_snapsot_location_git {
+    diff \
+    <(zip_snapshot_location "git://github.com/openstack/nova.git" "master") \
+    <(echo "http://github.com/openstack/nova/zipball/master")
+}
+
 function test_create_directory_for_kernels {
     (
         . mocks
@@ -162,11 +174,41 @@ function test_create_directory_for_images_existing_dir {
 EOF
 }
 
+function test_extract_remote_zipball {
+    local RESULT=$(. mocks && extract_remote_zipball "someurl")
+
+    diff <(cat $LIST_OF_ACTIONS) - << EOF
+wget -nv someurl -O tempfile --no-check-certificate
+unzip -q -o tempfile -d tempdir
+rm -f tempfile
+EOF
+
+    [ "$RESULT" = "tempdir" ]
+}
+
+function test_extract_remote_zipball_wget_fail {
+    set +e
+
+    local IGNORE
+    IGNORE=$(. mocks && extract_remote_zipball "failurl")
+
+    assert_died_with "Failed to download [failurl]"
+}
+
+function test_find_nova_plugins {
+    local tmpdir=$(mktemp -d)
+
+    mkdir -p "$tmpdir/blah/blah/u/xapi.d/plugins"
+
+    [ "$tmpdir/blah/blah/u/xapi.d/plugins" = $(find_xapi_plugins_dir $tmpdir) ]
+
+    rm -rf $tmpdir
+}
+
 function test_get_local_sr {
     setup_xe_response "uuid123"
 
-    local RESULT
-    RESULT=$(. mocks && get_local_sr)
+    local RESULT=$(. mocks && get_local_sr)
 
     [ "$RESULT" == "uuid123" ]
 
@@ -174,8 +216,7 @@ function test_get_local_sr {
 }
 
 function test_get_local_sr_path {
-    local RESULT
-    RESULT=$(mock_out get_local_sr "uuid1" && get_local_sr_path)
+    local RESULT=$(mock_out get_local_sr "uuid1" && get_local_sr_path)
 
     [ "/var/run/sr-mount/uuid1" == "$RESULT" ]
 }

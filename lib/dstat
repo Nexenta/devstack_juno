@@ -1,6 +1,4 @@
-#!/bin/bash
-#
-# lib/dstat
+# lib/apache
 # Functions to start and stop dstat
 
 # Dependencies:
@@ -13,25 +11,31 @@
 # - stop_dstat
 
 # Save trace setting
-_XTRACE_DSTAT=$(set +o | grep xtrace)
+XTRACE=$(set +o | grep xtrace)
 set +o xtrace
+
+
+# Defaults
+# --------
+# for DSTAT logging
+DSTAT_FILE=${DSTAT_FILE:-"dstat.txt"}
+
 
 # start_dstat() - Start running processes, including screen
 function start_dstat {
     # A better kind of sysstat, with the top process per time slice
-    run_process dstat "$TOP_DIR/tools/dstat.sh $LOGDIR"
-
-    # To enable peakmem_tracker add:
-    #    enable_service peakmem_tracker
-    # to your localrc
-    run_process peakmem_tracker "$TOP_DIR/tools/peakmem_tracker.sh"
+    DSTAT_OPTS="-tcmndrylp --top-cpu-adv"
+    if [[ -n ${SCREEN_LOGDIR} ]]; then
+        screen_it dstat "cd $TOP_DIR; dstat $DSTAT_OPTS | tee $SCREEN_LOGDIR/$DSTAT_FILE"
+    else
+        screen_it dstat "dstat $DSTAT_OPTS"
+    fi
 }
 
 # stop_dstat() stop dstat process
 function stop_dstat {
-    stop_process dstat
-    stop_process peakmem_tracker
+    screen_stop dstat
 }
 
 # Restore xtrace
-$_XTRACE_DSTAT
+$XTRACE

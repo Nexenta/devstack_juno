@@ -41,6 +41,7 @@ unset NOVA_PROJECT_ID
 unset NOVA_REGION_NAME
 unset NOVA_URL
 unset NOVA_USERNAME
+unset NOVA_VERSION
 
 for i in OS_TENANT_NAME OS_USERNAME OS_PASSWORD OS_AUTH_URL; do
     is_set $i
@@ -100,6 +101,9 @@ if [[ "$ENABLED_SERVICES" =~ "n-api" ]]; then
             STATUS_EC2="Failed"
             RETURN=1
         fi
+
+        # Clean up side effects
+        unset NOVA_VERSION
     fi
 fi
 

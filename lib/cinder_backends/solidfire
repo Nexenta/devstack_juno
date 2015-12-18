@@ -1,5 +1,3 @@
-#!/bin/bash
-#
 # lib/cinder_backends/solidfire
 # Configure the solidfire driver
 
@@ -17,7 +15,7 @@
 # configure_cinder_driver - make configuration changes, including those to other services
 
 # Save trace setting
-_XTRACE_CINDER_SOLIDFIRE=$(set +o | grep xtrace)
+MY_XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 
@@ -42,7 +40,7 @@ function configure_cinder_backend_solidfire {
 
 
 # Restore xtrace
-$_XTRACE_CINDER_SOLIDFIRE
+$MY_XTRACE
 
 # Local variables:
 # mode: shell-script

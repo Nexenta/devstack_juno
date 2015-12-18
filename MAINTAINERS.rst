@@ -45,13 +45,6 @@ Fedora/CentOS/RHEL
 Neutron
 ~~~~~~~
 
-MidoNet
-~~~~~~~
-
-* Jaume Devesa <devvesa@gmail.com>
-* Ryu Ishimoto <ryu@midokura.com>
-* YAMAMOTO Takashi <yamamoto@midokura.com>
-
 OpenDaylight
 ~~~~~~~~~~~~
 
@@ -62,6 +55,17 @@ OpenFlow Agent (ofagent)
 
 * YAMAMOTO Takashi <yamamoto@valinux.co.jp>
 * Fumihiko Kakuma <kakuma@valinux.co.jp>
+
+Ryu
+~~~
+
+* YAMAMOTO Takashi <yamamoto@valinux.co.jp>
+* Fumihiko Kakuma <kakuma@valinux.co.jp>
+
+Sahara
+~~~~~~
+
+* Sergey Lukjanov <slukjanov@mirantis.com>
 
 Swift
 ~~~~~
@@ -77,6 +81,12 @@ SUSE
 Tempest
 ~~~~~~~
 
+Trove
+~~~~~
+
+* Nikhil Manchanda <SlickNik@gmail.com>
+* Michael Basnight <mbasnight@gmail.com>
+
 Xen
 ~~~
 * Bob Ball <bob.ball@citrix.com>
@@ -86,7 +96,3 @@ Zaqar (Marconi)
 
 * Flavio Percoco <flaper87@gmail.com>
 * Malini Kamalambal <malini.kamalambal@rackspace.com>
-
-Oracle Linux
-~~~~~~~~~~~~
-* Wiekus Beukes <wiekus.beukes@oracle.com>

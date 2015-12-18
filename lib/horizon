@@ -1,5 +1,3 @@
-#!/bin/bash
-#
 # lib/horizon
 # Functions to control the configuration and operation of the horizon service
 
@@ -19,7 +17,7 @@
 # - cleanup_horizon
 
 # Save trace setting
-_XTRACE_HORIZON=$(set +o | grep xtrace)
+XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 
@@ -35,6 +33,10 @@ HORIZON_DIR=$DEST/horizon
 # The example file in Horizon repo is used by default.
 HORIZON_SETTINGS=${HORIZON_SETTINGS:-$HORIZON_DIR/openstack_dashboard/local/local_settings.py.example}
 
+# Tell Tempest this project is present
+TEMPEST_SERVICES+=,horizon
+
+
 # Functions
 # ---------
 
@@ -49,8 +51,7 @@ function _horizon_config_set {
         sed -e "/^$option/d" -i $local_settings
         echo -e "\n$option=$value" >> $file
     elif grep -q "^$section" $file; then
-        local line
-        line=$(sed -ne "/^$section/,/^}/ { /^ *'$option':/ p; }" $file)
+        local line=$(sed -ne "/^$section/,/^}/ { /^ *'$option':/ p; }" $file)
         if [ -n "$line" ]; then
             sed -i -e "/^$section/,/^}/ s/^\( *'$option'\) *:.*$/\1: $value,/" $file
         else
@@ -69,8 +70,15 @@ function _horizon_config_set {
 # cleanup_horizon() - Remove residual data files, anything left over from previous
 # runs that a clean run would need to clean up
 function cleanup_horizon {
-    local horizon_conf
-    horizon_conf=$(apache_site_config_for horizon)
+    if [[ is_fedora && $DISTRO =~ (rhel6) ]]; then
+        # If ``/usr/bin/node`` points into ``$DEST``
+        # we installed it via ``install_nodejs``
+        if [[ $(readlink -f /usr/bin/node) =~ ($DEST) ]]; then
+            sudo rm /usr/bin/node
+        fi
+    fi
+
+    local horizon_conf=$(apache_site_config_for horizon)
     sudo rm -f $horizon_conf
 }
 
@@ -91,16 +99,11 @@ function init_horizon {
     local local_settings=$HORIZON_DIR/openstack_dashboard/local/local_settings.py
     cp $HORIZON_SETTINGS $local_settings
 
-    _horizon_config_set $local_settings "" WEBROOT \"$HORIZON_APACHE_ROOT/\"
-    _horizon_config_set $local_settings "" CUSTOM_THEME_PATH \"themes/webroot\"
-
-    _horizon_config_set $local_settings "" COMPRESS_OFFLINE True
-    _horizon_config_set $local_settings "" OPENSTACK_KEYSTONE_DEFAULT_ROLE \"Member\"
-
     _horizon_config_set $local_settings "" OPENSTACK_HOST \"${KEYSTONE_SERVICE_HOST}\"
-
-    _horizon_config_set $local_settings "" OPENSTACK_API_VERSIONS {\"identity\":3}
-    _horizon_config_set $local_settings "" OPENSTACK_KEYSTONE_URL "\"${KEYSTONE_SERVICE_PROTOCOL}://${KEYSTONE_SERVICE_HOST}:${KEYSTONE_SERVICE_PORT}/v3\""
+    _horizon_config_set $local_settings "" OPENSTACK_KEYSTONE_URL "\"${KEYSTONE_SERVICE_PROTOCOL}://${KEYSTONE_SERVICE_HOST}:${KEYSTONE_SERVICE_PORT}/v2.0\""
+    if [[ -n "$KEYSTONE_TOKEN_HASH_ALGORITHM" ]]; then
+        _horizon_config_set $local_settings "" OPENSTACK_TOKEN_HASH_ALGORITHM \""$KEYSTONE_TOKEN_HASH_ALGORITHM"\"
+    fi
 
     if [ -f $SSL_BUNDLE_FILE ]; then
         _horizon_config_set $local_settings "" OPENSTACK_SSL_CACERT \"${SSL_BUNDLE_FILE}\"
@@ -109,8 +112,7 @@ function init_horizon {
     # Create an empty directory that apache uses as docroot
     sudo mkdir -p $HORIZON_DIR/.blackhole
 
-    local horizon_conf
-    horizon_conf=$(apache_site_config_for horizon)
+    local horizon_conf=$(apache_site_config_for horizon)
 
     # Configure apache to run horizon
     sudo sh -c "sed -e \"
@@ -119,7 +121,6 @@ function init_horizon {
         s,%HORIZON_DIR%,$HORIZON_DIR,g;
         s,%APACHE_NAME%,$APACHE_NAME,g;
         s,%DEST%,$DEST,g;
-        s,%WEBROOT%,$HORIZON_APACHE_ROOT,g;
     \" $FILES/apache-horizon.template >$horizon_conf"
 
     if is_ubuntu; then
@@ -134,21 +135,10 @@ function init_horizon {
     fi
     enable_apache_site horizon
 
-    # Remove old log files that could mess with how DevStack detects whether Horizon
+    # Remove old log files that could mess with how devstack detects whether Horizon
     # has been successfully started (see start_horizon() and functions::screen_it())
     # and run_process
     sudo rm -f /var/log/$APACHE_NAME/horizon_*
-
-    # Setup alias for django-admin which could be different depending on distro
-    local django_admin
-    if type -p django-admin > /dev/null; then
-        django_admin=django-admin
-    else
-        django_admin=django-admin.py
-    fi
-
-    DJANGO_SETTINGS_MODULE=openstack_dashboard.settings $django_admin collectstatic --noinput
-    DJANGO_SETTINGS_MODULE=openstack_dashboard.settings $django_admin compress --force
 
 }
 
@@ -171,7 +161,7 @@ function install_horizon {
     # Apache installation, because we mark it NOPRIME
     install_apache_wsgi
 
-    git_clone $HORIZON_REPO $HORIZON_DIR $HORIZON_BRANCH
+    git_clone $HORIZON_REPO $HORIZON_DIR $HORIZON_BRANCH $HORIZON_TAG
 }
 
 # start_horizon() - Start running processes, including screen
@@ -191,9 +181,8 @@ function _prepare_message_catalog_compilation {
     pip_install_gr Babel
 }
 
-
 # Restore xtrace
-$_XTRACE_HORIZON
+$XTRACE
 
 # Tell emacs to use shell-script-mode
 ## Local variables:

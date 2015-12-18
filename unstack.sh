@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # **unstack.sh**
 
@@ -6,22 +6,11 @@
 # mysql and rabbit are left running as OpenStack code refreshes
 # do not require them to be restarted.
 #
-# Stop all processes by setting ``UNSTACK_ALL`` or specifying ``-a``
+# Stop all processes by setting ``UNSTACK_ALL`` or specifying ``--all``
 # on the command line
 
-UNSTACK_ALL=""
-
-while getopts ":a" opt; do
-    case $opt in
-        a)
-            UNSTACK_ALL=""
-            ;;
-    esac
-done
-
-# Keep track of the current DevStack directory.
+# Keep track of the current devstack directory.
 TOP_DIR=$(cd $(dirname "$0") && pwd)
-FILES=$TOP_DIR/files
 
 # Import common functions
 source $TOP_DIR/functions
@@ -30,7 +19,7 @@ source $TOP_DIR/functions
 source $TOP_DIR/lib/database
 
 # Load local configuration
-source $TOP_DIR/openrc
+source $TOP_DIR/stackrc
 
 # Destination path for service data
 DATA_DIR=${DATA_DIR:-${DEST}/data}
@@ -45,10 +34,6 @@ fi
 # Configure Projects
 # ==================
 
-# Plugin Phase 0: override_defaults - allow plugins to override
-# defaults before other services are run
-run_phase override_defaults
-
 # Import apache functions
 source $TOP_DIR/lib/apache
 
@@ -58,18 +43,19 @@ source $TOP_DIR/lib/tls
 # Source project function libraries
 source $TOP_DIR/lib/infra
 source $TOP_DIR/lib/oslo
-source $TOP_DIR/lib/lvm
+source $TOP_DIR/lib/stackforge
 source $TOP_DIR/lib/horizon
 source $TOP_DIR/lib/keystone
 source $TOP_DIR/lib/glance
 source $TOP_DIR/lib/nova
 source $TOP_DIR/lib/cinder
 source $TOP_DIR/lib/swift
+source $TOP_DIR/lib/ceilometer
 source $TOP_DIR/lib/heat
-source $TOP_DIR/lib/neutron-legacy
+source $TOP_DIR/lib/neutron
+source $TOP_DIR/lib/baremetal
 source $TOP_DIR/lib/ldap
 source $TOP_DIR/lib/dstat
-source $TOP_DIR/lib/dlm
 
 # Extras Source
 # --------------
@@ -81,17 +67,23 @@ if [[ -d $TOP_DIR/extras.d ]]; then
     done
 fi
 
-load_plugin_settings
-
 # Determine what system we are running on.  This provides ``os_VENDOR``,
 # ``os_RELEASE``, ``os_UPDATE``, ``os_PACKAGE``, ``os_CODENAME``
 GetOSVersion
+
+if [[ "$1" == "--all" ]]; then
+    UNSTACK_ALL=${UNSTACK_ALL:-1}
+fi
 
 # Run extras
 # ==========
 
 # Phase: unstack
-run_phase unstack
+if [[ -d $TOP_DIR/extras.d ]]; then
+    for i in $TOP_DIR/extras.d/*.sh; do
+        [[ -r $i ]] && source $i unstack
+    done
+fi
 
 if [[ "$Q_USE_DEBUG_COMMAND" == "True" ]]; then
     source $TOP_DIR/openrc
@@ -104,6 +96,10 @@ if is_service_enabled heat; then
     stop_heat
 fi
 
+if is_service_enabled ceilometer; then
+    stop_ceilometer
+fi
+
 if is_service_enabled nova; then
     stop_nova
 fi
@@ -112,7 +108,7 @@ if is_service_enabled glance; then
     stop_glance
 fi
 
-if is_service_enabled keystone; then
+if is_service_enabled key; then
     stop_keystone
 fi
 
@@ -132,19 +128,13 @@ if is_service_enabled tls-proxy; then
     stop_tls_proxy
     cleanup_CA
 fi
-if [ "$USE_SSL" == "True" ]; then
-    cleanup_CA
-fi
 
 SCSI_PERSIST_DIR=$CINDER_STATE_PATH/volumes/*
 
-# BUG: tgt likes to exit 1 on service stop if everything isn't
-# perfect, we should clean up cinder stop paths.
-
 # Get the iSCSI volumes
 if is_service_enabled cinder; then
-    stop_cinder || /bin/true
-    cleanup_cinder || /bin/true
+    stop_cinder
+    cleanup_cinder
 fi
 
 if [[ -n "$UNSTACK_ALL" ]]; then
@@ -169,12 +159,12 @@ if is_service_enabled neutron; then
     cleanup_neutron
 fi
 
-if is_service_enabled dstat; then
-    stop_dstat
+if is_service_enabled trove; then
+    cleanup_trove
 fi
 
-if is_service_enabled zookeeper; then
-    stop_zookeeper
+if is_service_enabled dstat; then
+    stop_dstat
 fi
 
 # Clean up the remainder of the screen processes
@@ -184,13 +174,4 @@ if [[ -n "$SCREEN" ]]; then
     if [[ -n "$SESSION" ]]; then
         screen -X -S $SESSION quit
     fi
-fi
-
-# BUG: maybe it doesn't exist? We should isolate this further down.
-# NOTE: Cinder automatically installs the lvm2 package, independently of the
-# enabled backends. So if Cinder is enabled, we are sure lvm (lvremove,
-# /etc/lvm/lvm.conf, etc.) is here.
-if is_service_enabled cinder; then
-    clean_lvm_volume_group $DEFAULT_VOLUME_GROUP_NAME || /bin/true
-    clean_lvm_filter
 fi

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Keep track of the DevStack directory
+# Keep track of the devstack directory
 TOP_DIR=$(cd $(dirname "$0")/.. && pwd)
 
 source $TOP_DIR/functions

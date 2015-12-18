@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # **clean.sh**
 
@@ -18,7 +18,7 @@ source $TOP_DIR/functions
 FILES=$TOP_DIR/files
 
 # Load local configuration
-source $TOP_DIR/openrc
+source $TOP_DIR/stackrc
 
 # Get the variables that are set in stack.sh
 if [[ -r $TOP_DIR/.stackenv ]]; then
@@ -41,16 +41,18 @@ source $TOP_DIR/lib/rpc_backend
 source $TOP_DIR/lib/tls
 
 source $TOP_DIR/lib/oslo
-source $TOP_DIR/lib/lvm
 source $TOP_DIR/lib/horizon
 source $TOP_DIR/lib/keystone
 source $TOP_DIR/lib/glance
 source $TOP_DIR/lib/nova
 source $TOP_DIR/lib/cinder
 source $TOP_DIR/lib/swift
+source $TOP_DIR/lib/ceilometer
 source $TOP_DIR/lib/heat
-source $TOP_DIR/lib/neutron-legacy
+source $TOP_DIR/lib/neutron
+source $TOP_DIR/lib/baremetal
 source $TOP_DIR/lib/ironic
+source $TOP_DIR/lib/trove
 
 
 # Extras Source
@@ -75,9 +77,6 @@ fi
 # ==========
 
 # Phase: clean
-load_plugin_settings
-run_phase clean
-
 if [[ -d $TOP_DIR/extras.d ]]; then
     for i in $TOP_DIR/extras.d/*.sh; do
         [[ -r $i ]] && source $i clean
@@ -85,10 +84,7 @@ if [[ -d $TOP_DIR/extras.d ]]; then
 fi
 
 # Clean projects
-
-# BUG: cinder tgt doesn't exit cleanly if it's not running.
-cleanup_cinder || /bin/true
-
+cleanup_cinder
 cleanup_glance
 cleanup_keystone
 cleanup_nova
@@ -114,29 +110,16 @@ sudo rm -f /etc/tgt/conf.d/*
 cleanup_rpc_backend
 cleanup_database
 
-# Clean out data and status
-sudo rm -rf $DATA_DIR $DEST/status
-
-# Clean out the log file and log directories
-if [[ -n "$LOGFILE" ]] && [[ -f "$LOGFILE" ]]; then
-    sudo rm -f $LOGFILE
-fi
-if [[ -n "$LOGDIR" ]] && [[ -d "$LOGDIR" ]]; then
-    sudo rm -rf $LOGDIR
-fi
+# Clean out data, logs and status
+LOGDIR=$(dirname "$LOGFILE")
+sudo rm -rf $DATA_DIR $LOGDIR $DEST/status
 if [[ -n "$SCREEN_LOGDIR" ]] && [[ -d "$SCREEN_LOGDIR" ]]; then
     sudo rm -rf $SCREEN_LOGDIR
 fi
 
-# Clean up venvs
-DIRS_TO_CLEAN="$WHEELHOUSE ${PROJECT_VENV[@]} .config/openstack"
-rm -rf $DIRS_TO_CLEAN
-
 # Clean up files
 
-FILES_TO_CLEAN=".localrc.auto .localrc.password "
-FILES_TO_CLEAN+="docs/files docs/html shocco/ "
-FILES_TO_CLEAN+="stack-screenrc test*.conf* test.ini* "
+FILES_TO_CLEAN=".localrc.auto docs/files docs/html shocco/ stack-screenrc test*.conf* test.ini*"
 FILES_TO_CLEAN+=".stackenv .prereqs"
 
 for file in $FILES_TO_CLEAN; do

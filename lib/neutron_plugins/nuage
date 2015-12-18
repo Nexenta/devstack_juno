@@ -1,15 +1,14 @@
-#!/bin/bash
-#
 # Nuage Neutron Plugin
 # ----------------------
 
 # Save trace setting
-_XTRACE_NEUTRON_NU=$(set +o | grep xtrace)
+NU_XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 function neutron_plugin_create_nova_conf {
     NOVA_OVS_BRIDGE=${NOVA_OVS_BRIDGE:-"br-int"}
-    iniset $NOVA_CONF neutron ovs_bridge $NOVA_OVS_BRIDGE
+    iniset $NOVA_CONF DEFAULT neutron_ovs_bridge $NOVA_OVS_BRIDGE
+    NOVA_VIF_DRIVER=${NOVA_VIF_DRIVER:-"nova.virt.libvirt.vif.LibvirtGenericVIFDriver"}
     LIBVIRT_FIREWALL_DRIVER=nova.virt.firewall.NoopFirewallDriver
     iniset $NOVA_CONF DEFAULT firewall_driver $LIBVIRT_FIREWALL_DRIVER
 }
@@ -66,4 +65,4 @@ function has_neutron_plugin_security_group {
 }
 
 # Restore xtrace
-$_XTRACE_NEUTRON_NU
+$NU_XTRACE

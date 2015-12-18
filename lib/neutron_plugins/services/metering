@@ -1,10 +1,8 @@
-#!/bin/bash
-
 # Neutron metering plugin
 # ---------------------------
 
 # Save trace setting
-_XTRACE_NETURON_METER=$(set +o | grep xtrace)
+METER_XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 
@@ -25,9 +23,8 @@ function neutron_agent_metering_configure_agent {
 }
 
 function neutron_metering_stop {
-    stop_process q-metering
+    :
 }
 
 # Restore xtrace
-$_XTRACE_NETURON_METER
-
+$METER_XTRACE

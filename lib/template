@@ -1,5 +1,3 @@
-#!/bin/bash
-#
 # lib/template
 # Functions to control the configuration and operation of the XXXX service
 # <do not include this template file in ``stack.sh``!>
@@ -21,7 +19,7 @@
 # - cleanup_XXXX
 
 # Save trace setting
-_XTRACE_TEMPLATE=$(set +o | grep xtrace)
+XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 
@@ -92,7 +90,7 @@ function stop_XXXX {
 }
 
 # Restore xtrace
-$_XTRACE_TEMPLATE
+$XTRACE
 
 # Tell emacs to use shell-script-mode
 ## Local variables:

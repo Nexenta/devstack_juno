@@ -1,17 +1,14 @@
-#!/bin/bash
-#
 # Neutron Embrane plugin
 # ---------------------------
 
 # Save trace setting
-_XTRACE_NEUTRON_EMBR=$(set +o | grep xtrace)
+EMBR_XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 source $TOP_DIR/lib/neutron_plugins/openvswitch
 
 function save_function {
-    local ORIG_FUNC
-    ORIG_FUNC=$(declare -f $1)
+    local ORIG_FUNC=$(declare -f $1)
     local NEW_FUNC="$2${ORIG_FUNC#$1}"
     eval "$NEW_FUNC"
 }
@@ -39,5 +36,4 @@ function neutron_plugin_configure_service {
 }
 
 # Restore xtrace
-$_XTRACE_NEUTRON_EMBR
-
+$EMBR_XTRACE

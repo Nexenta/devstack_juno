@@ -18,10 +18,8 @@
 
 import argparse
 import datetime
-import fnmatch
 import os
 import os.path
-import subprocess
 import sys
 
 
@@ -31,46 +29,24 @@ def get_options():
     parser.add_argument('-d', '--dir',
                         default='.',
                         help='Output directory for worlddump')
-    parser.add_argument('-n', '--name',
-                        default='',
-                        help='Additional name to tag into file')
     return parser.parse_args()
 
 
-def filename(dirname, name=""):
+def filename(dirname):
     now = datetime.datetime.utcnow()
-    fmt = "worlddump-%Y-%m-%d-%H%M%S"
-    if name:
-        fmt += "-" + name
-    fmt += ".txt"
-    return os.path.join(dirname, now.strftime(fmt))
+    return os.path.join(dirname, now.strftime("worlddump-%Y-%m-%d-%H%M%S.txt"))
 
 
 def warn(msg):
     print "WARN: %s" % msg
 
 
-def _dump_cmd(cmd):
-    print cmd
-    print "-" * len(cmd)
-    print
-    try:
-        subprocess.check_call(cmd, shell=True)
-    except subprocess.CalledProcessError:
-        print "*** Failed to run: %s" % cmd
-
-
-def _header(name):
-    print
-    print name
-    print "=" * len(name)
-    print
-
-
 def disk_space():
     # the df output
-    _header("File System Summary")
-
+    print """
+File System Summary
+===================
+"""
     dfraw = os.popen("df -Ph").read()
     df = [s.split() for s in dfraw.splitlines()]
     for fs in df:
@@ -85,72 +61,24 @@ def disk_space():
     print dfraw
 
 
-def ebtables_dump():
-    tables = ['filter', 'nat', 'broute']
-    _header("EB Tables Dump")
-    for table in tables:
-        _dump_cmd("sudo ebtables -t %s -L" % table)
-
-
-def iptables_dump():
-    tables = ['filter', 'nat', 'mangle']
-    _header("IP Tables Dump")
-
-    for table in tables:
-        _dump_cmd("sudo iptables --line-numbers -L -nv -t %s" % table)
-
-
-def network_dump():
-    _header("Network Dump")
-
-    _dump_cmd("brctl show")
-    _dump_cmd("arp -n")
-    _dump_cmd("ip addr")
-    _dump_cmd("ip link")
-    _dump_cmd("ip route")
-
-
 def process_list():
-    _header("Process Listing")
-    _dump_cmd("ps axo "
-              "user,ppid,pid,pcpu,pmem,vsz,rss,tty,stat,start,time,args")
-
-
-def compute_consoles():
-    _header("Compute consoles")
-    for root, dirnames, filenames in os.walk('/opt/stack'):
-        for filename in fnmatch.filter(filenames, 'console.log'):
-            fullpath = os.path.join(root, filename)
-            _dump_cmd("sudo cat %s" % fullpath)
-
-
-def guru_meditation_report():
-    _header("nova-compute Guru Meditation Report")
-
-    try:
-        subprocess.check_call(["pgrep","nova-compute"])
-    except subprocess.CalledProcessError:
-        print "Skipping as nova-compute does not appear to be running"
-        return
-
-    _dump_cmd("kill -s USR1 `pgrep nova-compute`")
-    print "guru meditation report in nova-compute log"
+    print """
+Process Listing
+===============
+"""
+    psraw = os.popen("ps auxw").read()
+    print psraw
 
 
 def main():
     opts = get_options()
-    fname = filename(opts.dir, opts.name)
+    fname = filename(opts.dir)
     print "World dumping... see %s for details" % fname
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
     with open(fname, 'w') as f:
         os.dup2(f.fileno(), sys.stdout.fileno())
         disk_space()
         process_list()
-        network_dump()
-        iptables_dump()
-        ebtables_dump()
-        compute_consoles()
-        guru_meditation_report()
 
 
 if __name__ == '__main__':

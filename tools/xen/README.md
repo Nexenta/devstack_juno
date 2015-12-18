@@ -77,7 +77,7 @@ Of course, use real passwords if this machine is exposed.
     # NOTE: these need to be specified, otherwise devstack will try
     # to prompt for these passwords, blocking the install process.
 
-    DATABASE_PASSWORD=my_super_secret
+    MYSQL_PASSWORD=my_super_secret
     SERVICE_TOKEN=my_super_secret
     ADMIN_PASSWORD=my_super_secret
     SERVICE_PASSWORD=my_super_secret
@@ -93,6 +93,11 @@ Of course, use real passwords if this machine is exposed.
 
     XENAPI_CONNECTION_URL="http://address_of_your_xenserver"
     VNCSERVER_PROXYCLIENT_ADDRESS=address_of_your_xenserver
+
+    # Download a vhd and a uec image
+    IMAGE_URLS="\
+    https://github.com/downloads/citrix-openstack/warehouse/cirros-0.3.0-x86_64-disk.vhd.tgz,\
+    http://download.cirros-cloud.net/0.3.4/cirros-0.3.4-x86_64-uec.tar.gz"
 
     # Explicitly set virt driver
     VIRT_DRIVER=xenserver

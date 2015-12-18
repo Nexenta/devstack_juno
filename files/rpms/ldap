@@ -1,2 +1,3 @@
-openldap-clients
 openldap-servers
+openldap-clients
+python-ldap

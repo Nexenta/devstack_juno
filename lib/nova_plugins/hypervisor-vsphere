@@ -1,5 +1,3 @@
-#!/bin/bash
-#
 # lib/nova_plugins/hypervisor-vsphere
 # Configure the vSphere hypervisor
 
@@ -17,7 +15,7 @@
 # cleanup_nova_hypervisor - remove transient data and cache
 
 # Save trace setting
-_XTRACE_NOVA_VSPHERE=$(set +o | grep xtrace)
+MY_XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 
@@ -42,6 +40,9 @@ function configure_nova_hypervisor {
     iniset $NOVA_CONF vmware host_username "$VMWAREAPI_USER"
     iniset $NOVA_CONF vmware host_password "$VMWAREAPI_PASSWORD"
     iniset_multiline $NOVA_CONF vmware cluster_name "$VMWAREAPI_CLUSTER"
+    if is_service_enabled neutron; then
+        iniset $NOVA_CONF vmware integration_bridge $OVS_BRIDGE
+    fi
 }
 
 # install_nova_hypervisor() - Install external components
@@ -64,7 +65,7 @@ function stop_nova_hypervisor {
 
 
 # Restore xtrace
-$_XTRACE_NOVA_VSPHERE
+$MY_XTRACE
 
 # Local variables:
 # mode: shell-script

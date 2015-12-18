@@ -41,6 +41,7 @@ unset NOVA_PROJECT_ID
 unset NOVA_REGION_NAME
 unset NOVA_URL
 unset NOVA_USERNAME
+unset NOVA_VERSION
 
 # Save the known variables for later
 export x_TENANT_NAME=$OS_TENANT_NAME
@@ -68,7 +69,7 @@ if [[ "$ENABLED_SERVICES" =~ "key" ]]; then
         STATUS_KEYSTONE="Skipped"
     else
         echo -e "\nTest Keystone"
-        if openstack $TENANT_ARG $ARGS catalog show identity; then
+        if keystone $TENANT_ARG $ARGS catalog --service identity; then
             STATUS_KEYSTONE="Succeeded"
         else
             STATUS_KEYSTONE="Failed"

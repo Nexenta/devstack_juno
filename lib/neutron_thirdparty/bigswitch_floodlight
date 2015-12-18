@@ -1,10 +1,8 @@
-#!/bin/bash
-#
 # Big Switch/FloodLight  OpenFlow Controller
 # ------------------------------------------
 
 # Save trace setting
-_XTRACE_NEUTRON_BIGSWITCH=$(set +o | grep xtrace)
+BS3_XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 BS_FL_CONTROLLERS_PORT=${BS_FL_CONTROLLERS_PORT:-localhost:80}
@@ -51,4 +49,4 @@ function check_bigswitch_floodlight {
 }
 
 # Restore xtrace
-$_XTRACE_NEUTRON_BIGSWITCH
+$BS3_XTRACE

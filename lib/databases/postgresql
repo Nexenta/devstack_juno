@@ -1,5 +1,3 @@
-#!/bin/bash
-#
 # lib/databases/postgresql
 # Functions to control the configuration and operation of the **PostgreSQL** database backend
 
@@ -8,7 +6,7 @@
 # - DATABASE_{HOST,USER,PASSWORD} must be defined
 
 # Save trace setting
-_XTRACE_PG=$(set +o | grep xtrace)
+PG_XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 
@@ -20,10 +18,6 @@ register_database postgresql
 
 # Functions
 # ---------
-
-function get_database_type_postgresql {
-    echo postgresql
-}
 
 # Get rid of everything enough to cleanly change database backends
 function cleanup_database_postgresql {
@@ -41,9 +35,10 @@ function cleanup_database_postgresql {
 
 function recreate_database_postgresql {
     local db=$1
+    local charset=$2
     # Avoid unsightly error when calling dropdb when the database doesn't exist
     psql -h$DATABASE_HOST -U$DATABASE_USER -dtemplate1 -c "DROP DATABASE IF EXISTS $db"
-    createdb -h $DATABASE_HOST -U$DATABASE_USER -l C -T template0 -E utf8 $db
+    createdb -h $DATABASE_HOST -U$DATABASE_USER -l C -T template0 -E $charset $db
 }
 
 function configure_database_postgresql {
@@ -53,7 +48,11 @@ function configure_database_postgresql {
         pg_hba=/var/lib/pgsql/data/pg_hba.conf
         pg_conf=/var/lib/pgsql/data/postgresql.conf
         if ! sudo [ -e $pg_hba ]; then
-            sudo postgresql-setup initdb
+            if ! [[ $DISTRO =~ (rhel6) ]]; then
+                sudo postgresql-setup initdb
+            else
+                sudo service postgresql initdb
+            fi
         fi
     elif is_ubuntu; then
         pg_dir=`find /etc/postgresql -name pg_hba.conf|xargs dirname`
@@ -106,12 +105,6 @@ EOF
     fi
 }
 
-function install_database_python_postgresql {
-    # Install Python client module
-    pip_install_gr psycopg2
-    ADDITIONAL_VENV_PACKAGES+=",psycopg2"
-}
-
 function database_connection_url_postgresql {
     local db=$1
     echo "$BASE_SQL_CONN/$db?client_encoding=utf8"
@@ -119,7 +112,7 @@ function database_connection_url_postgresql {
 
 
 # Restore xtrace
-$_XTRACE_PG
+$PG_XTRACE
 
 # Local variables:
 # mode: shell-script

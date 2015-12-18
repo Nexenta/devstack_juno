@@ -1,10 +1,8 @@
-#!/bin/bash
-#
 # Brocade Neutron Plugin
 # ----------------------
 
 # Save trace setting
-_XTRACE_NEUTRON_BROCADE=$(set +o | grep xtrace)
+BRCD_XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 function is_neutron_ovs_base_plugin {
@@ -12,7 +10,7 @@ function is_neutron_ovs_base_plugin {
 }
 
 function neutron_plugin_create_nova_conf {
-    :
+    NOVA_VIF_DRIVER=${NOVA_VIF_DRIVER:-"nova.virt.libvirt.vif.LibvirtGenericVIFDriver"}
 }
 
 function neutron_plugin_install_agent_packages {
@@ -68,7 +66,7 @@ function neutron_plugin_configure_plugin_agent {
 
 function neutron_plugin_setup_interface_driver {
     local conf_file=$1
-    iniset $conf_file DEFAULT interface_driver linuxbridge
+    iniset $conf_file DEFAULT interface_driver neutron.agent.linux.interface.BridgeInterfaceDriver
 }
 
 function has_neutron_plugin_security_group {
@@ -81,4 +79,4 @@ function neutron_plugin_check_adv_test_requirements {
 }
 
 # Restore xtrace
-$_XTRACE_NEUTRON_BROCADE
+$BRCD_XTRACE

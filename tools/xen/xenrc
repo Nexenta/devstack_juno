@@ -14,12 +14,12 @@ CLEAN_TEMPLATES=${CLEAN_TEMPLATES:-false}
 # Size of image
 VDI_MB=${VDI_MB:-5000}
 
-# Devstack now contains many components.  4GB ram is not enough to prevent
+# Devstack now contains many components.  3GB ram is not enough to prevent
 # swapping and memory fragmentation - the latter of which can cause failures
 # such as blkfront failing to plug a VBD and lead to random test fails.
 #
-# Set to 6GB so an 8GB XenServer VM can have a 1GB Dom0 and leave 1GB for VMs
-OSDOMU_MEM_MB=6144
+# Set to 4GB so an 8GB XenServer VM can have a 1GB Dom0 and leave 3GB for VMs
+OSDOMU_MEM_MB=4096
 OSDOMU_VDI_GB=8
 
 # Network mapping. Specify bridge names or network names. Network names may
@@ -70,8 +70,8 @@ UBUNTU_INST_TEMPLATE_NAME="Ubuntu 14.04 (64-bit) for DevStack"
 # XenServer 6.1 and later or XCP 1.6 or later
 # 11.10 is only really supported with XenServer 6.0.2 and later
 UBUNTU_INST_ARCH="amd64"
-UBUNTU_INST_HTTP_HOSTNAME="archive.ubuntu.com"
-UBUNTU_INST_HTTP_DIRECTORY="/ubuntu"
+UBUNTU_INST_HTTP_HOSTNAME="mirror.anl.gov"
+UBUNTU_INST_HTTP_DIRECTORY="/pub/ubuntu"
 UBUNTU_INST_HTTP_PROXY=""
 UBUNTU_INST_LOCALE="en_US"
 UBUNTU_INST_KEYBOARD="us"
@@ -91,24 +91,7 @@ UBUNTU_INST_GATEWAY=""
 # Set the size to 0 to avoid creation of additional disk.
 XEN_XVDB_SIZE_GB=0
 
-STACK_USER=stack
-DOMZERO_USER=domzero
-
-RC_DIR="../.."
-
-restore_nounset=$(set +o | grep nounset)
+restore_nounset=`set +o | grep nounset`
 set +u
-
-## Note that the lines below are coming from stackrc to support
-## new-style config files
-
-# allow local overrides of env variables, including repo config
-if [[ -f $RC_DIR/localrc ]]; then
-    # Old-style user-supplied config
-    source $RC_DIR/localrc
-elif [[ -f $RC_DIR/.localrc.auto ]]; then
-    # New-style user-supplied config extracted from local.conf
-    source $RC_DIR/.localrc.auto
-fi
-
+source ../../stackrc
 $restore_nounset
